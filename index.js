@@ -392,12 +392,22 @@ app.post('/admins/login', async (req, res) => {
 // 3️⃣ Logout (تسجيل الخروج)
 // ===========================
 // مبدئيًا في JWT لا يوجد حذف مباشر للتوكن، فقط نحذفه من المتصفح
-app.post('/admins/logout', (req, res) => {
+app.post('/admins/logout',  (req, res) => {
   try {
-    // عند تسجيل الخروج من الواجهة، يتم حذف التوكن من التخزين المحلي (frontend)
-    res.status(200).json({ message: "✅ تم تسجيل الخروج بنجاح (يرجى حذف التوكن من التخزين المحلي)" });
+    // Ici vous pouvez ajouter la logique pour blacklist le token si nécessaire
+    // Par exemple, ajouter le token à une blacklist dans la base de données
+    
+    res.status(200).json({ 
+      success: true,
+      message: "✅ Déconnexion réussie" 
+    });
   } catch (error) {
-    res.status(500).json({ message: "❌ خطأ أثناء تسجيل الخروج", error });
+    console.error("Erreur déconnexion:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "❌ Erreur lors de la déconnexion", 
+      error: error.message 
+    });
   }
 });
 
