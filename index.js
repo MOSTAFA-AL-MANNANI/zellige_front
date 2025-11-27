@@ -9,7 +9,7 @@ const JWT_SECRET = "secret_key_for_admin_token";
 const app=express();
 app.use(cors());
 app.use(express.json());
-mongoose.connect('mongodb+srv://admin:admin@cluster0.tawg3vv.mongodb.net/zellige')
+mongoose.connect('mongodb+srv://rania:admin@cluster0.k5bwvsw.mongodb.net/eco')
 .then(()=>{
     console.log('Connecte to Mongo Db')
 }).catch((err)=>{
