@@ -22,120 +22,149 @@ const Client = require('./modules/Client');
 const Order = require('./modules/Order');
 const Product = require('./modules/Product');
 const Contact = require('./modules/Contact');
-// 📁 مجلد لحفظ الصور
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// 🔧 إعداد multer لحفظ الصور
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/'); // مجلد الحفظ
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname)); // اسم الملف الجديد
-  },
-});
 
-// 🖼️ فقط صور JPG / PNG / JPEG
+
+
+
+
+
+// ------------------------------
+// 🔹 Multer - stockage في الذاكرة
+// ------------------------------
+const storage = multer.memoryStorage();
 const upload = multer({
-  storage: storage,
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // الحد الأقصى 5MB
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png/;
-    const ext = path.extname(file.originalname).toLowerCase();
+    const ext = file.originalname.toLowerCase();
     if (allowedTypes.test(ext)) {
       cb(null, true);
     } else {
-      cb(new Error("Seulement les fichiers JPG, JPEG, PNG sont autorisés"));
+      cb(new Error("فقط الصور JPG, JPEG, PNG مسموحة"));
     }
   },
 });
 
-//product
-app.get('/product', async (req,res)=>{
-    try{
-        const pro=await Product.find();
-        res.status(200).json(pro)
-    }catch(err){
-            console.error('❌ Error fetching product:', err);
-    res.status(500).json({ message: 'Error fetching product' }); 
-    }
-})
-
-app.get('/product/:id', async(req,res)=>{
-    try{
-        const id=req.params.id;
-        const product=await Product.findById(id);
-        res.status(200).json(product)
-    }catch (err){
-            console.error('❌ Error fetching product:', err);
-    res.status(500).json({ message: 'Error fetching product' }); 
-    }
-})
-
-app.delete('/product/:id', async (req, res) => {
+// Afficher tous les produits avec image encodée en base64
+app.get("/product", async (req, res) => {
   try {
-    const id=req.params.id;
-    const pro =await Product.findByIdAndDelete(id);  
-                      
-    res.status(200).json(pro);         
+    const products = await Product.find();
+    const formattedProducts = products.map((p) => ({
+      _id: p._id,
+      name: p.name,
+      description: p.description,
+      prix: p.prix,
+      stock: p.stock,
+      category: p.category,
+      image: p.image && p.image.data
+        ? `data:${p.image.contentType};base64,${p.image.data.toString("base64")}`
+        : null,
+    }));
+    res.status(200).json(formattedProducts);
   } catch (err) {
-    console.error('❌ Error fetching produit:', err);
-    res.status(500).json({ message: 'Error fetching produit' }); 
+    console.error(err);
+    res.status(500).json({ message: "Erreur fetching produits" });
   }
 });
 
-app.post('/product', upload.single('image'), async (req, res) => {
+// Afficher un produit par ID
+app.get('/product/:id', async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "❌ Produit non trouvé" });
+
+    const formattedProduct = {
+      _id: product._id,
+      name: product.name,
+      description: product.description,
+      prix: product.prix,
+      stock: product.stock,
+      category: product.category,
+      image: product.image && product.image.data
+        ? `data:${product.image.contentType};base64,${product.image.data.toString('base64')}`
+        : null,
+    };
+
+    res.status(200).json(formattedProduct);
+  } catch (err) {
+    console.error('❌ Error fetching product:', err);
+    res.status(500).json({ message: 'Error fetching product' });
+  }
+});
+
+// Supprimer un produit
+app.delete('/product/:id', async (req, res) => {
+  try {
+    const deleted = await Product.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "❌ Produit non trouvé" });
+    res.status(200).json({ message: "Produit supprimé", product: deleted });
+  } catch (err) {
+    console.error('❌ Error deleting product:', err);
+    res.status(500).json({ message: 'Error deleting product' });
+  }
+});
+
+// Ajouter un produit avec image
+app.post("/product", upload.single("image"), async (req, res) => {
   try {
     const { name, description, prix, stock, category } = req.body;
-
     const newProduct = new Product({
       name,
       description,
       prix,
       stock,
       category,
-      image: req.file ? `/uploads/${req.file.filename}` : "",
+      image: req.file ? { data: req.file.buffer, contentType: req.file.mimetype } : null,
     });
 
     await newProduct.save();
-    res.status(201).json(newProduct);
+    res.status(201).json({ message: "Produit ajouté", product: newProduct });
   } catch (err) {
-    console.error('❌ Erreur ajout produit:', err);
-    res.status(500).json({ message: 'Erreur serveur' });
+    console.error(err);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 });
-// 📝 تعديل منتج موجود
+
+// Modifier un produit
 app.put('/product/:id', upload.single('image'), async (req, res) => {
   try {
-    const id = req.params.id;
     const { name, description, prix, stock, category } = req.body;
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "❌ Produit non trouvé" });
 
-    // 🟢 جلب المنتج القديم
-    const oldProduct = await Product.findById(id);
-    if (!oldProduct) {
-      return res.status(404).json({ message: '❌ Produit non trouvé' });
-    }
+    // Mise à jour des champs
+    product.name = name || product.name;
+    product.description = description || product.description;
+    product.prix = prix || product.prix;
+    product.stock = stock || product.stock;
+    product.category = category || product.category;
 
-    // 🟡 تحديث القيم الجديدة
-    oldProduct.name = name || oldProduct.name;
-    oldProduct.description = description || oldProduct.description;
-    oldProduct.prix = prix || oldProduct.prix;
-    oldProduct.stock = stock || oldProduct.stock;
-    oldProduct.category = category || oldProduct.category;
-
-    // 🖼️ إذا كانت هناك صورة جديدة، نحدّثها
+    // Mise à jour de l'image si envoyée
     if (req.file) {
-      oldProduct.image = `/uploads/${req.file.filename}`;
+      product.image = { data: req.file.buffer, contentType: req.file.mimetype };
     }
 
-    await oldProduct.save();
+    await product.save();
 
     res.status(200).json({
-      message: '✅ Produit mis à jour avec succès',
-      product: oldProduct,
+      message: "✅ Produit mis à jour avec succès",
+      product: {
+        _id: product._id,
+        name: product.name,
+        description: product.description,
+        prix: product.prix,
+        stock: product.stock,
+        category: product.category,
+        image: product.image && product.image.data
+          ? `data:${product.image.contentType};base64,${product.image.data.toString('base64')}`
+          : null,
+      },
     });
   } catch (error) {
-    console.error('❌ Erreur lors de la mise à jour du produit:', error);
-    res.status(500).json({ message: 'Erreur serveur', error });
+    console.error("❌ Erreur mise à jour produit:", error);
+    res.status(500).json({ message: "Erreur serveur", error });
   }
 });
 
